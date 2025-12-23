@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="30" fill="#f59e0b"/>
+  
+  <!-- Main chat bubble -->
+  <path d="M16 18 C13 18 11 20 11 23 L11 33 C11 36 13 38 16 38 L18 38 L18 44 L25 38 L36 38 C39 38 41 36 41 33 L41 23 C41 20 39 18 36 18 Z" fill="white"/>
+  
+  <!-- Branch indicator -->
+  <path d="M36 28 L46 28 C49 28 51 30 51 33 L51 40 C51 43 49 45 46 45 L44 45 L44 49 L40 45 L36 45" fill="white" opacity="0.75"/>
+</svg>
