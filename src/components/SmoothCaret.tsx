@@ -75,7 +75,7 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
   return (
     <div
       ref={caretRef}
-      className="absolute pointer-events-none z-10"
+      className="absolute pointer-events-none z-50"
       style={{
         left: `${caretPosition.x}px`,
         top: `${caretPosition.y}px`,
@@ -91,11 +91,20 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
           }}
         />
         
-        {/* Comet tail effect */}
+        {/* Comet tail effect - multiple layers for visibility */}
         <div
-          className="absolute top-0 -left-0.5 w-1 h-6 bg-gradient-to-b from-purple-400/80 via-purple-300/40 to-transparent dark:from-purple-500/80 dark:via-purple-400/40 blur-[2px]"
+          className="absolute top-0 -left-1 w-2 h-8 bg-gradient-to-b from-purple-500 via-purple-400/60 to-transparent"
           style={{
+            filter: "blur(3px)",
             animation: "tail-glow 1s ease-in-out infinite",
+            transformOrigin: "top center",
+          }}
+        />
+        <div
+          className="absolute top-0 -left-0.5 w-1 h-6 bg-gradient-to-b from-purple-500/90 via-purple-400/50 to-transparent"
+          style={{
+            filter: "blur(1px)",
+            animation: "tail-glow 1s ease-in-out infinite 0.1s",
           }}
         />
       </div>
@@ -112,12 +121,12 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
 
         @keyframes tail-glow {
           0%, 100% {
-            opacity: 0.4;
-            transform: scaleY(1.2);
+            opacity: 0.5;
+            transform: scaleY(1.3);
           }
           50% {
-            opacity: 0.8;
-            transform: scaleY(1.8);
+            opacity: 1;
+            transform: scaleY(2);
           }
         }
       `}</style>
