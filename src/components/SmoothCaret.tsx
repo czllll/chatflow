@@ -85,7 +85,7 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
       {/* Main caret line */}
       <div className="relative">
         <div
-          className="w-0.5 h-6 bg-purple-600 dark:bg-purple-500 animate-blink"
+          className="w-0.5 h-6 bg-purple-600 dark:bg-purple-500"
           style={{
             animation: "blink 1s step-end infinite",
           }}
@@ -93,9 +93,8 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
         
         {/* Comet tail effect */}
         <div
-          className="absolute top-0 left-0 w-0.5 h-6 bg-gradient-to-b from-purple-400/60 via-purple-300/30 to-transparent dark:from-purple-500/60 dark:via-purple-400/30 blur-sm"
+          className="absolute top-0 -left-0.5 w-1 h-6 bg-gradient-to-b from-purple-400/80 via-purple-300/40 to-transparent dark:from-purple-500/80 dark:via-purple-400/40 blur-[2px]"
           style={{
-            transform: "translateX(-1px) scaleY(1.5)",
             animation: "tail-glow 1s ease-in-out infinite",
           }}
         />
@@ -113,12 +112,12 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
 
         @keyframes tail-glow {
           0%, 100% {
-            opacity: 0.3;
-            transform: translateX(-1px) scaleY(1.5);
+            opacity: 0.4;
+            transform: scaleY(1.2);
           }
           50% {
-            opacity: 0.6;
-            transform: translateX(-1px) scaleY(2);
+            opacity: 0.8;
+            transform: scaleY(1.8);
           }
         }
       `}</style>
