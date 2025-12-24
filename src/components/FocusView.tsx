@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, KeyboardEvent, FormEvent } from "react";
+import { useState, useCallback, useRef, useEffect, KeyboardEvent, FormEvent, useMemo } from "react";
 import { useChatFlowStore, type Message, type MessageContent, getMessageText } from "@/store";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -10,6 +10,7 @@ import "katex/dist/katex.min.css";
 import BranchButton from "./BranchButton";
 import ModelSelector from "./ModelSelector";
 import SmoothCaret from "./SmoothCaret";
+import Image from "next/image";
 
 import { preprocessLaTeX } from "@/utils/latex";
 
@@ -28,7 +29,6 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
     providerConfigs,
     nodes,
     updateNodeData,
-    setActiveNode,
     setViewMode,
   } = useChatFlowStore();
 
@@ -37,7 +37,6 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [selectedText, setSelectedText] = useState("");
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [floatingPos, setFloatingPos] = useState<{ x: number; y: number } | null>(null);
   const [showBranchButton, setShowBranchButton] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
@@ -52,7 +51,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
 
   const node = nodes.find((n) => n.id === nodeId);
   const nodeData = node?.data;
-  const messages = nodeData?.messages || [];
+  const messages = useMemo(() => nodeData?.messages || [], [nodeData?.messages]);
 
   // Determine current configuration
   const currentConfig = providerConfigs[activeProviderId] || {
@@ -95,7 +94,6 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
         y: rect.top - containerRect.top - 10,
       });
       setSelectedText(selection.toString().trim());
-      setSelectedMessageId(messageId);
       setShowBranchButton(true);
     }
   }, []);
@@ -121,7 +119,6 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
         setShowBranchButton(false);
         setFloatingPos(null);
         setSelectedText("");
-        setSelectedMessageId(null);
       }
     };
 
@@ -133,7 +130,6 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
     setShowBranchButton(false);
     setFloatingPos(null);
     setSelectedText("");
-    setSelectedMessageId(null);
     window.getSelection()?.removeAllRanges();
   }, []);
 
@@ -376,7 +372,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
         <div className="px-6 py-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800">
           <div className="max-w-3xl mx-auto flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
             </svg>
             <span className="text-amber-700 dark:text-amber-300 italic line-clamp-1">
               {nodeData.reference}
@@ -418,11 +414,14 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
                        {message.content.map((part, i) => {
                          if (part.type === "image_url") {
                            return (
-                             <img 
+                             <Image 
                                key={i} 
                                src={part.image_url.url} 
                                alt="User uploaded" 
-                               className="max-w-full rounded-lg max-h-64 object-contain"
+                               width={500}
+                               height={300}
+                               className="max-w-full rounded-lg max-h-64 object-contain w-auto h-auto"
+                               unoptimized
                              />
                            );
                          }
@@ -464,7 +463,14 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
             {/* Image Preview */}
             {selectedImage && (
               <div className="relative inline-block w-fit px-2 pt-2">
-                <img src={selectedImage} alt="Preview" className="h-20 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700" />
+                <Image 
+                  src={selectedImage} 
+                  alt="Preview" 
+                  width={80}
+                  height={80}
+                  className="h-20 w-auto rounded-lg object-cover border border-zinc-200 dark:border-zinc-700" 
+                  unoptimized
+                />
                 <button
                   type="button"
                   onClick={clearSelectedImage}

@@ -145,8 +145,8 @@ interface ChatFlowState {
 }
 
 // Initial root node
-const createInitialNode = (): Node<ChatNodeData> => ({
-  id: "root",
+const createInitialNode = (id: string): Node<ChatNodeData> => ({
+  id,
   type: "chatNode",
   position: { x: 100, y: 100 },
   data: {
@@ -157,7 +157,8 @@ const createInitialNode = (): Node<ChatNodeData> => ({
 
 // Create a new session
 const createNewSession = (): Session => {
-  const rootNode = createInitialNode();
+  const rootId = `root-${nanoid()}`;
+  const rootNode = createInitialNode(rootId);
   return {
     id: nanoid(),
     title: "New Chat",
@@ -165,13 +166,13 @@ const createNewSession = (): Session => {
     updatedAt: Date.now(),
     nodes: [rootNode],
     edges: [],
-    rootNodeId: "root",
+    rootNodeId: rootId,
   };
 };
 
 // Generate session title from first message
-const generateSessionTitle = (nodes: Node<ChatNodeData>[]): string => {
-  const rootNode = nodes.find(n => n.id === "root" || n.data.messages.length > 0);
+const generateSessionTitle = (nodes: Node<ChatNodeData>[], rootNodeId: string): string => {
+  const rootNode = nodes.find(n => n.id === rootNodeId || n.data.messages.length > 0);
   if (rootNode && rootNode.data.messages.length > 0) {
     const firstUserMessage = rootNode.data.messages.find(m => m.role === "user");
     if (firstUserMessage) {
@@ -207,7 +208,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
         // Initial canvas state (from active session)
         nodes: initialSession.nodes,
         edges: initialSession.edges,
-        activeNodeId: "root",
+        activeNodeId: initialSession.rootNodeId,
         viewMode: "focus",
         activeProviderId: "openrouter",
         theme: "system",
@@ -300,7 +301,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
         // Get session title - auto-generate from first user message
         getSessionTitle: (session: Session) => {
           if (session.title !== "New Chat") return session.title;
-          return generateSessionTitle(session.nodes);
+          return generateSessionTitle(session.nodes, session.rootNodeId);
         },
 
         // Session actions
@@ -324,7 +325,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
             activeSessionId: newSession.id,
             nodes: newSession.nodes,
             edges: newSession.edges,
-            activeNodeId: "root",
+            activeNodeId: newSession.rootNodeId,
             viewMode: "focus",
           });
           
@@ -522,7 +523,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
                         ...s, 
                         nodes: newNodes, 
                         updatedAt: Date.now(),
-                        title: shouldUpdateTitle ? generateSessionTitle(newNodes) : s.title
+                        title: shouldUpdateTitle ? generateSessionTitle(newNodes, s.rootNodeId) : s.title
                       }
                     : s
                 ),
@@ -546,7 +547,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
                       ...s,
                       nodes: newNodes,
                       updatedAt: Date.now(),
-                      title: shouldUpdateTitle ? generateSessionTitle(newNodes) : s.title,
+                      title: shouldUpdateTitle ? generateSessionTitle(newNodes, s.rootNodeId) : s.title,
                     };
                   }
                   return s;

@@ -51,8 +51,8 @@ const PROVIDERS = [
 export default function SettingsPanel() {
   const { 
     apiKey, 
-    baseUrl, 
-    modelId, 
+    // baseUrl, // unused
+    // modelId, // unused 
     providerConfigs,
     activeProviderId,
     setApiKey, 
@@ -250,18 +250,18 @@ export default function SettingsPanel() {
     setIsOpen(false);
   };
 
-  const handleAddModel = (model: ModelInfo) => {
-    const config = providerConfigs[selectedProvider] || { models: [] };
-    if (!config.models.find(m => m.id === model.id)) {
-      updateProviderConfig(selectedProvider, {
-        models: [...config.models, { 
-          id: model.id, 
-          nickname: model.name || model.id,
-          isMultimodal: model.isMultimodal || false,
-        }]
-      });
-    }
-  };
+  // const handleAddModel = (model: ModelInfo) => {
+  //   const config = providerConfigs[selectedProvider] || { models: [] };
+  //   if (!config.models.find(m => m.id === model.id)) {
+  //     updateProviderConfig(selectedProvider, {
+  //       models: [...config.models, { 
+  //         id: model.id, 
+  //         nickname: model.name || model.id,
+  //         isMultimodal: model.isMultimodal || false,
+  //       }]
+  //     });
+  //   }
+  // };
 
   const handleRemoveModel = (modelId: string) => {
     const config = providerConfigs[selectedProvider];

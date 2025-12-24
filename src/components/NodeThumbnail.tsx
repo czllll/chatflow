@@ -9,12 +9,14 @@ interface NodeThumbnailProps {
 }
 
 export default function NodeThumbnail({ nodeId, isActive, onClick }: NodeThumbnailProps) {
-  const { nodes, removeNode } = useChatFlowStore();
+  const { nodes, removeNode, sessions, activeSessionId } = useChatFlowStore();
   
   const node = nodes.find((n) => n.id === nodeId);
   const nodeData = node?.data;
   const messages = nodeData?.messages || [];
   const reference = nodeData?.reference;
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const isRoot = nodeId === activeSession?.rootNodeId;
   
   // Get preview content
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
@@ -44,7 +46,7 @@ export default function NodeThumbnail({ nodeId, isActive, onClick }: NodeThumbna
       `}
     >
       {/* Delete button for non-root nodes */}
-      {nodeId !== "root" && (
+      {!isRoot && (
         <button
           onClick={(e) => {
             e.stopPropagation();

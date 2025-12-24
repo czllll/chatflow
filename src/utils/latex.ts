@@ -97,11 +97,9 @@ export function preprocessLaTeX(content: string): string {
         const fullMatch = match[0]; // e.g. "\begin{equation}"
         
         // Find corresponding \end{...}
+        // Find corresponding \end{...}
         // We need to handle nested environments of the same name.
-        let depth = 1;
-        let searchPos = i + fullMatch.length;
-        let endTagMatch: RegExpExecArray | null = null;
-        let foundEnd = false;
+        const searchPos = i + fullMatch.length;
         
         // Naive linear search for balanced \begin and \end tags for this specific environment
         const beginRegex = new RegExp(`\\\\begin\\s*\\{${escapeRegExp(envName)}\\}`, 'g');
@@ -151,7 +149,7 @@ export function preprocessLaTeX(content: string): string {
              // we need a counter.
              
              let currentDepth = 1;
-             let scanCursor = searchPos;
+             const scanCursor = searchPos;
              
              // Regex for either begin or end tag of this type
              const tagRegex = new RegExp(`\\\\(begin|end)\\s*\\{${escapeRegExp(envName)}\\}`, 'g');
@@ -176,7 +174,6 @@ export function preprocessLaTeX(content: string): string {
              }
              
              if (closeIndex !== -1) {
-                 foundEnd = true;
                  const fullBlock = content.substring(i, closeIndex + fullCloseTagLength);
                  
                  // If the environment is a known display environment, wrap it.

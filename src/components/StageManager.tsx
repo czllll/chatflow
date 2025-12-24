@@ -149,10 +149,10 @@ export default function StageManager() {
         </div>
 
         {/* Action buttons */}
-        <div className="px-2 pb-3 space-y-1">
+        <div className="px-2 pb-2 mt-2">
           <button
             onClick={handleNewSession}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm text-zinc-700 dark:text-zinc-300"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm text-zinc-900 dark:text-zinc-100 cursor-pointer"
             title="New Conversation"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -162,16 +162,13 @@ export default function StageManager() {
           </button>
         </div>
 
-        {/* Divider */}
-        <div className="h-px bg-zinc-200 dark:bg-zinc-800 mx-2" />
-
         {/* Session list with tree structure */}
         <div className="flex-1 overflow-y-auto">
-          <div className="px-2 py-2">
-            <h3 className="px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-              Conversations
-            </h3>
-            <div className="space-y-3">
+          <div className="px-4 pb-2 pt-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
+            Your chats
+          </div>
+          <div className="px-2">
+            <div className="space-y-0.5">
               {[...sessions].sort((a, b) => b.updatedAt - a.updatedAt).map((session) => {
                 const isActive = session.id === activeSessionId;
                 const rootNode = session.nodes.find(n => n.id === session.rootNodeId);
@@ -182,7 +179,8 @@ export default function StageManager() {
                   const firstUserMsg = rootNode.data.messages.find(m => m.role === "user");
                   if (firstUserMsg) {
                     const content = getMessageText(firstUserMsg.content);
-                    return content.length > 40 ? content.slice(0, 40) + "..." : content;
+                    // Single line clamp for title
+                    return content.length > 32 ? content.slice(0, 32) + "..." : content;
                   }
                   return "New Chat";
                 };
@@ -193,37 +191,35 @@ export default function StageManager() {
                   <div key={session.id} className="space-y-1">
                     {/* Session header */}
                     <div
-                      className={`group flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+                      className={`group flex items-center gap-2 px-3 py-2 rounded-lg transition-colors cursor-pointer text-sm ${
                         isActive
-                          ? "bg-amber-50 dark:bg-amber-900/20"
-                          : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white"
                       }`}
+                      onClick={() => switchSession(session.id)}
                     >
-                      <div 
-                        onClick={() => switchSession(session.id)}
-                        className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
-                      >
-                        <svg className="w-4 h-4 shrink-0 text-zinc-600 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate text-zinc-900 dark:text-white">{title}</div>
-                        </div>
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        {/* Only show icon if we want to emulate generic file icons, but GPT just lists text mostly. 
+                            Let's keep it simple: text only, maybe small dot for active? 
+                            The user asked for "like GPT", GPT lists are just text. 
+                            I'll remove the folder icon to be cleaner. */}
+                        <div className="truncate">{title}</div>
                       </div>
+                      
                       <button
                         onClick={(e) => handleDeleteSession(session.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-all"
                         title="Delete conversation"
                       >
-                        <svg className="w-3.5 h-3.5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
                     </div>
                     
-                    {/* Show tree structure only for active session */}
+                    {/* Show tree structure only for active session, slightly indented */}
                     {isActive && rootNode && (
-                      <div className="ml-2">
+                      <div className="ml-1 mt-1">
                         <TreeNodeComponent
                           session={session}
                           activeNodeId={activeNodeId}

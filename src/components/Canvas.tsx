@@ -13,7 +13,7 @@ const getServerSnapshot = () => false;
 
 export default function Canvas() {
   const isHydrated = useSyncExternalStore(emptySubscribe, getSnapshot, getServerSnapshot);
-  const { nodes, activeNodeId, setActiveNode, viewMode, theme } =
+  const { nodes, activeNodeId, setActiveNode, viewMode, theme, sessions, activeSessionId } =
     useChatFlowStore();
 
   // Handle theme changes
@@ -33,9 +33,10 @@ export default function Canvas() {
   // Ensure activeNodeId is valid
   useEffect(() => {
     if (isHydrated && !nodes.find((n) => n.id === activeNodeId)) {
-      setActiveNode(nodes[0]?.id || "root");
+        const activeSession = sessions.find(s => s.id === activeSessionId);
+        setActiveNode(nodes[0]?.id || activeSession?.rootNodeId || "root");
     }
-  }, [nodes, activeNodeId, setActiveNode, isHydrated]);
+  }, [nodes, activeNodeId, setActiveNode, isHydrated, sessions, activeSessionId]);
 
   if (!isHydrated) {
     return (

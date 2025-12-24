@@ -56,12 +56,12 @@ export default function TreeNode({
     <div>
       {/* Current node */}
       <div
-        className={`group flex items-center gap-1 px-2 py-1.5 rounded-md transition-colors cursor-pointer ${
+        className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors cursor-pointer ${
           isActive
             ? "bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100"
-            : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+            : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
         }`}
-        style={{ paddingLeft: `${8 + indentPx}px` }}
+        style={{ paddingLeft: `${4 + indentPx}px` }}
       >
         {/* Expand/collapse button */}
         {hasChildren && (

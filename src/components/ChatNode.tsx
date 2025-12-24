@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, KeyboardEvent, FormEvent } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { useChatFlowStore, type ChatNodeData, type Message, type BranchHighlight, getMessageText } from "@/store";
+import { useChatFlowStore, type ChatNodeData, type Message, getMessageText } from "@/store";
 import BranchButton from "./BranchButton";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,6 +11,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
 import { preprocessLaTeX } from "@/utils/latex";
+import Image from "next/image";
 
 
 type ChatNodeType = Node<ChatNodeData, "chatNode">;
@@ -24,14 +25,14 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
     providerConfigs,
     updateNodeData,
     removeNode,
-    createBranch,
     setActiveNode,
     setViewMode,
+    sessions,
+    activeSessionId,
   } = useChatFlowStore();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedText, setSelectedText] = useState("");
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [floatingPos, setFloatingPos] = useState<{ x: number; y: number } | null>(null);
   const [showBranchButton, setShowBranchButton] = useState(false);
   const nodeRef = useRef<HTMLDivElement>(null);
@@ -40,6 +41,8 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const nodeData = data as ChatNodeData;
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const isRoot = id === activeSession?.rootNodeId;
 
   // Determine current configuration
   const currentConfig = providerConfigs[activeProviderId] || {
@@ -83,7 +86,6 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
         y: rect.top - nodeRect.top - 10,
       });
       setSelectedText(selection.toString().trim());
-      setSelectedMessageId(messageId);
       setShowBranchButton(true);
     }
   }, []);
@@ -111,7 +113,6 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
         setShowBranchButton(false);
         setFloatingPos(null);
         setSelectedText("");
-        setSelectedMessageId(null);
       }
     };
 
@@ -125,23 +126,22 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
   }, [nodeData.messages]);
 
   // Handle branch button click
-  const handleBranchClick = useCallback(() => {
-    if (selectedText) {
-      createBranch(id, selectedText, selectedMessageId || undefined);
-    }
-    setShowBranchButton(false);
-    setFloatingPos(null);
-    setSelectedText("");
-    setSelectedMessageId(null);
-    window.getSelection()?.removeAllRanges();
-  }, [createBranch, id, selectedText, selectedMessageId]);
+  // const handleBranchClick = useCallback(() => {
+  //   if (selectedText) {
+  //     createBranch(id, selectedText, selectedMessageId || undefined);
+  //   }
+  //   setShowBranchButton(false);
+  //   setFloatingPos(null);
+  //   setSelectedText("");
+  //   setSelectedMessageId(null);
+  //   window.getSelection()?.removeAllRanges();
+  // }, [createBranch, id, selectedText, selectedMessageId]);
 
   // Handle branch button close
   const handleBranchClose = useCallback(() => {
     setShowBranchButton(false);
     setFloatingPos(null);
     setSelectedText("");
-    setSelectedMessageId(null);
     window.getSelection()?.removeAllRanges();
   }, []);
 
@@ -285,7 +285,7 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
 
       <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-100 dark:border-zinc-800">
         <span className="text-xs text-zinc-400 font-mono">
-          {id === "root" ? "Main Thread" : "Branch"}
+          {isRoot ? "Main Thread" : "Branch"}
         </span>
         <div className="flex items-center gap-1">
           {/* Expand to Focus View button */}
@@ -302,7 +302,7 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
             </svg>
           </button>
           {/* Delete button for non-root nodes */}
-          {id !== "root" && (
+          {!isRoot && (
             <button
               onClick={() => removeNode(id)}
               className="p-1 text-zinc-400 hover:text-red-500 transition-colors rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -353,11 +353,14 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
                    {message.content.map((part, i) => {
                      if (part.type === "image_url") {
                        return (
-                         <img 
+                         <Image 
                            key={i} 
                            src={part.image_url.url} 
                            alt="User uploaded" 
-                           className="max-w-full rounded-lg max-h-64 object-contain" 
+                           width={500}
+                           height={300}
+                           className="max-w-full rounded-lg max-h-64 object-contain w-auto h-auto"
+                           unoptimized 
                          />
                        );
                      }
