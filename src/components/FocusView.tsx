@@ -53,6 +53,12 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
   const nodeData = node?.data;
   const messages = useMemo(() => nodeData?.messages || [], [nodeData?.messages]);
 
+  // Reset loading state when switching nodes
+  // Don't abort the request - let it complete in background
+  useEffect(() => {
+    setIsLoading(false);
+  }, [nodeId]);
+
   // Determine current configuration
   const currentConfig = providerConfigs[activeProviderId] || {
     apiKey: legacyApiKey,
@@ -260,19 +266,28 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
           });
         }
       } catch (error) {
-        if ((error as Error).name !== "AbortError") {
-          console.error("Chat error:", error);
-          updateNodeData(nodeId, {
-            messages: [
-              ...currentMessages,
-              {
-                id: Date.now().toString() + "-error",
-                role: "assistant",
-                content: `Error: ${(error as Error).message}`,
-              },
-            ],
-          });
+        const errorName = (error as Error).name;
+        const errorMessage = (error as Error).message;
+        
+        // Ignore AbortError and network errors caused by page refresh/navigation
+        if (errorName === "AbortError") return;
+        if (errorMessage === "network error" || errorMessage === "Failed to fetch") {
+          console.warn("Network interrupted (likely page refresh):", error);
+          return;
         }
+        
+        // Only save real errors
+        console.error("Chat error:", error);
+        updateNodeData(nodeId, {
+          messages: [
+            ...currentMessages,
+            {
+              id: Date.now().toString() + "-error",
+              role: "assistant",
+              content: `Error: ${errorMessage}`,
+            },
+          ],
+        });
       } finally {
         setIsLoading(false);
         abortControllerRef.current = null;

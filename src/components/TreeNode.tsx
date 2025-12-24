@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Node } from "@xyflow/react";
 import { ChatNodeData, getMessageText } from "@/store";
 import { TreeNodeData } from "@/utils/treeBuilder";
@@ -15,7 +15,7 @@ interface TreeNodeProps {
   isRoot?: boolean;
 }
 
-export default function TreeNode({
+const TreeNode = memo(function TreeNode({
   node,
   childNodes = [],
   depth,
@@ -136,4 +136,15 @@ export default function TreeNode({
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if these key properties change
+  return (
+    prevProps.node.id === nextProps.node.id &&
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.depth === nextProps.depth &&
+    (prevProps.childNodes?.length ?? 0) === (nextProps.childNodes?.length ?? 0) &&
+    prevProps.isRoot === nextProps.isRoot
+  );
+});
+
+export default TreeNode;

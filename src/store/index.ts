@@ -546,7 +546,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
                     return {
                       ...s,
                       nodes: newNodes,
-                      updatedAt: Date.now(),
+                      // Don't update updatedAt for background sessions to avoid reordering
                       title: shouldUpdateTitle ? generateSessionTitle(newNodes, s.rootNodeId) : s.title,
                     };
                   }

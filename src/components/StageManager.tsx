@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, useEffect } from "react";
-import { useChatFlowStore, getMessageText } from "@/store";
+import { useChatFlowStore } from "@/store";
 import FocusView from "./FocusView";
 import TreeNode from "./TreeNode";
 import { buildTree } from "@/utils/treeBuilder";
@@ -173,19 +173,8 @@ export default function StageManager() {
                 const isActive = session.id === activeSessionId;
                 const rootNode = session.nodes.find(n => n.id === session.rootNodeId);
                 
-                // Get conversation title from root node
-                const getConversationTitle = () => {
-                  if (!rootNode) return "New Chat";
-                  const firstUserMsg = rootNode.data.messages.find(m => m.role === "user");
-                  if (firstUserMsg) {
-                    const content = getMessageText(firstUserMsg.content);
-                    // Single line clamp for title
-                    return content.length > 32 ? content.slice(0, 32) + "..." : content;
-                  }
-                  return "New Chat";
-                };
-                
-                const title = getConversationTitle();
+                // Use session title directly
+                const title = session.title;
                 
                 return (
                   <div key={session.id} className="space-y-1">
