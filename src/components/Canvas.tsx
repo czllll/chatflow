@@ -2,7 +2,6 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { useChatFlowStore } from "@/store";
-import FocusView from "./FocusView";
 import StageManager from "./StageManager";
 import CanvasView from "./CanvasView";
 import SettingsPanel from "./SettingsPanel";
@@ -14,8 +13,22 @@ const getServerSnapshot = () => false;
 
 export default function Canvas() {
   const isHydrated = useSyncExternalStore(emptySubscribe, getSnapshot, getServerSnapshot);
-  const { nodes, activeNodeId, setActiveNode, viewMode } =
+  const { nodes, activeNodeId, setActiveNode, viewMode, theme } =
     useChatFlowStore();
+
+  // Handle theme changes
+  useEffect(() => {
+    const root = window.document.documentElement;
+    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    root.classList.toggle('dark', isDark);
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handler = (e: MediaQueryListEvent) => root.classList.toggle('dark', e.matches);
+      mediaQuery.addEventListener('change', handler);
+      return () => mediaQuery.removeEventListener('change', handler);
+    }
+  }, [theme]);
 
   // Ensure activeNodeId is valid
   useEffect(() => {

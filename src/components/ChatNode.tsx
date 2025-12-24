@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, KeyboardEvent, FormEvent, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, KeyboardEvent, FormEvent } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { useChatFlowStore, type ChatNodeData, type Message, type BranchHighlight } from "@/store";
+import { useChatFlowStore, type ChatNodeData, type Message, type BranchHighlight, getMessageText } from "@/store";
 import BranchButton from "./BranchButton";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,16 +15,20 @@ function preprocessLaTeX(content: string): string {
   let processed = content;
   
   // Replace \begin{equation*}...\end{equation*} with $$ ... $$
-  processed = processed.replace(/\\begin\{equation\*?\}([\s\S]+?)\\end\{equation\*?\}/g, (_, p1) => `$$${p1.trim()}$$`);
+  processed = processed.replace(/(\$\$)?\s*(\\begin\{equation\*?\}([\s\S]+?)\\end\{equation\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$${content.trim()}$$`);
   
-  // Replace \begin{align}...\end{align} with $$ ... $$
-  processed = processed.replace(/\\begin\{align\*?\}([\s\S]+?)\\end\{align\*?\}/g, (_, p1) => `$$\\begin{aligned}${p1}\\end{aligned}$$`);
+  // Replace \begin{align}...\end{align} with $$ \begin{aligned} ... \end{aligned} $$
+  processed = processed.replace(/(\$\$)?\s*(\\begin\{align\*?\}([\s\S]+?)\\end\{align\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$\\begin{aligned}${content}\\end{aligned}$$`);
   
-  // Replace \begin{gather}...\end{gather} with $$ ... $$
-  processed = processed.replace(/\\begin\{gather\*?\}([\s\S]+?)\\end\{gather\*?\}/g, (_, p1) => `$$\\begin{gathered}${p1}\\end{gathered}$$`);
+  // Replace \begin{gather}...\end{gather} with $$ \begin{gathered} ... \end{gathered} $$
+  processed = processed.replace(/(\$\$)?\s*(\\begin\{gather\*?\}([\s\S]+?)\\end\{gather\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$\\begin{gathered}${content}\\end{gathered}$$`);
   
   // Replace \begin{matrix}...\end{matrix} variants
-  processed = processed.replace(/\\begin\{(b?p?v?B?V?matrix)\}([\s\S]+?)\\end\{\1\}/g, (_, type, p1) => `$$\\begin{${type}}${p1}\\end{${type}}$$`);
+  // For matrix environments, we only wrap in $$ if they aren't already wrapped.
+  processed = processed.replace(/(\$\$)?\s*(\\begin\{(matrix|pmatrix|bmatrix|vmatrix|Vmatrix)\}[\s\S]+?\\end\{\3\})\s*(\$\$)?/g, (match, pre, env, type, post) => {
+    if (pre === '$$' && post === '$$') return match;
+    return `$$${env}$$`;
+  });
   
   // Replace \[ ... \] with $$ ... $$ (display math)
   processed = processed.replace(/\\\[([\s\S]+?)\\\]/g, (_, p1) => `$$${p1.trim()}$$`);
@@ -36,71 +40,6 @@ function preprocessLaTeX(content: string): string {
 }
 
 type ChatNodeType = Node<ChatNodeData, "chatNode">;
-function HighlightedContent({ 
-  content, 
-  highlights 
-}: { 
-  content: string; 
-  highlights: BranchHighlight[];
-}) {
-  if (!highlights || highlights.length === 0) {
-    return <>{content}</>;
-  }
-
-  // Find all highlight positions
-  const parts: { text: string; isHighlight: boolean; branchId?: string }[] = [];
-  let lastIndex = 0;
-
-  // Sort highlights by their position in content
-  const sortedHighlights = highlights
-    .map((h) => ({ ...h, index: content.indexOf(h.text) }))
-    .filter((h) => h.index !== -1)
-    .sort((a, b) => a.index - b.index);
-
-  for (const highlight of sortedHighlights) {
-    const index = content.indexOf(highlight.text, lastIndex);
-    if (index === -1) continue;
-
-    // Add text before highlight
-    if (index > lastIndex) {
-      parts.push({ text: content.slice(lastIndex, index), isHighlight: false });
-    }
-
-    // Add highlighted text
-    parts.push({ 
-      text: highlight.text, 
-      isHighlight: true, 
-      branchId: highlight.branchNodeId 
-    });
-
-    lastIndex = index + highlight.text.length;
-  }
-
-  // Add remaining text
-  if (lastIndex < content.length) {
-    parts.push({ text: content.slice(lastIndex), isHighlight: false });
-  }
-
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.isHighlight ? (
-          <span
-            key={i}
-            className="bg-amber-200 dark:bg-amber-800/50 text-amber-900 dark:text-amber-100 
-              px-0.5 rounded border-b-2 border-amber-400 dark:border-amber-600
-              cursor-pointer hover:bg-amber-300 dark:hover:bg-amber-700/50 transition-colors"
-            title={`Branch: ${part.branchId}`}
-          >
-            {part.text}
-          </span>
-        ) : (
-          <span key={i}>{part.text}</span>
-        )
-      )}
-    </>
-  );
-}
 
 export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
   const {
@@ -247,7 +186,10 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
             },
             ...messagesToSend.map((m) => ({ role: m.role, content: m.content })),
           ]
-        : messagesToSend.map((m) => ({ role: m.role, content: m.content }));
+        : messagesToSend.map((m) => {
+            if (typeof m.content === "string") return { role: m.role, content: m.content };
+            return { role: m.role, content: m.content };
+          });
 
       try {
         abortControllerRef.current = new AbortController();
@@ -340,7 +282,7 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
       const userMessage: Message = {
         id: Date.now().toString(),
         role: "user",
-        content: input.trim(),
+        content: input.trim(), // ChatNode input is still text-only for now, can be upgraded later if needed
       };
 
       const newMessages = [...nodeData.messages, userMessage];
@@ -432,13 +374,31 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
             }`}
           >
             {message.role === "user" ? (
-              message.content
+              typeof message.content !== "string" && Array.isArray(message.content) ? (
+                <div className="space-y-2">
+                   {message.content.map((part, i) => {
+                     if (part.type === "image_url") {
+                       return (
+                         <img 
+                           key={i} 
+                           src={part.image_url.url} 
+                           alt="User uploaded" 
+                           className="max-w-full rounded-lg max-h-64 object-contain" 
+                         />
+                       );
+                     }
+                     return <div key={i}>{part.text}</div>;
+                   })}
+                </div>
+              ) : (
+                message.content
+              )
             ) : (
               <ReactMarkdown 
                 remarkPlugins={[remarkGfm, remarkMath]} 
                 rehypePlugins={[rehypeKatex]}
               >
-                {preprocessLaTeX(message.content)}
+                {preprocessLaTeX(getMessageText(message.content))}
               </ReactMarkdown>
             )}
           </div>

@@ -6,6 +6,7 @@ import { useChatFlowStore } from "@/store";
 interface ModelInfo {
   id: string;
   name?: string;
+  isMultimodal?: boolean;
 }
 
 // Provider icons as SVG components
@@ -58,11 +59,20 @@ export default function SettingsPanel() {
     setBaseUrl, 
     setModelId,
     updateProviderConfig,
-    setActiveProvider 
+    setActiveProvider,
+    theme,
+    setTheme,
+    syncStatus,
+    lastSyncedAt,
+    syncError,
+    syncToRemote,
+    syncFromRemote,
+    storageConfig,
+    setStorageConfig,
   } = useChatFlowStore();
   
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"general" | "models">("models");
+  const [activeTab, setActiveTab] = useState<"general" | "models" | "storage">("models");
   const [selectedProvider, setSelectedProvider] = useState("openrouter");
   
   // Local state for the selected provider
@@ -131,17 +141,65 @@ export default function SettingsPanel() {
 
       const data = await response.json();
       
+      // Helper to detect vision/image input capability from OpenRouter's architecture fields
+      // OpenRouter provides input_modalities array which is the most accurate source
+      const hasImageInputCapability = (model: { 
+        id: string; 
+        architecture?: { 
+          modality?: string;
+          input_modalities?: string[];
+        } 
+      }): boolean => {
+        const inputModalities = model.architecture?.input_modalities || [];
+        const modelId = model.id.toLowerCase();
+        
+        // Best source: check input_modalities array directly
+        if (inputModalities.includes("image")) {
+          return true;
+        }
+        
+        // Fallback: parse modality string (e.g., "text+image->text")
+        const modality = model.architecture?.modality?.toLowerCase() || "";
+        const inputPart = modality.split("->")[0] || "";
+        if (inputPart.includes("image")) {
+          return true;
+        }
+        
+        // Last resort: check model name patterns for known vision models
+        const visionPatterns = [
+          "gpt-4o",           // OpenAI omni models
+          "gpt-5",            // GPT-5 series supports vision
+          "gpt-4-vision",     // OpenAI vision
+          "gpt-4-turbo",      // GPT-4 Turbo supports vision
+          "claude-3",         // All Claude 3 models support vision
+          "claude-4",         // All Claude 4 models support vision
+          "gemini-pro-vision",
+          "gemini-1.5",       // Gemini 1.5 supports vision
+          "gemini-2",         // Gemini 2 supports vision
+          "gemini-3",         // Gemini 3 supports vision
+          "llava",            // LLaVA models
+          "qwen-vl",          // Qwen Vision-Language
+          "qwen3-vl",         // Qwen3 VL
+          "pixtral",          // Mistral's multimodal
+          "grok-4",           // xAI Grok 4 supports vision
+        ];
+        
+        return visionPatterns.some(pattern => modelId.includes(pattern));
+      };
+
       let modelList: ModelInfo[] = [];
       
       if (data.data && Array.isArray(data.data)) {
-        modelList = data.data.map((m: { id: string; name?: string }) => ({
+        modelList = data.data.map((m: { id: string; name?: string; architecture?: { modality?: string; input_modalities?: string[] } }) => ({
           id: m.id,
           name: m.name || m.id,
+          isMultimodal: hasImageInputCapability(m),
         }));
       } else if (Array.isArray(data)) {
-        modelList = data.map((m: string | { id: string; name?: string }) => ({
+        modelList = data.map((m: string | { id: string; name?: string; architecture?: { modality?: string; input_modalities?: string[] } }) => ({
           id: typeof m === 'string' ? m : m.id,
           name: typeof m === 'string' ? m : (m.name || m.id),
+          isMultimodal: typeof m === 'string' ? false : hasImageInputCapability(m),
         }));
       }
 
@@ -196,7 +254,11 @@ export default function SettingsPanel() {
     const config = providerConfigs[selectedProvider] || { models: [] };
     if (!config.models.find(m => m.id === model.id)) {
       updateProviderConfig(selectedProvider, {
-        models: [...config.models, { id: model.id, nickname: model.name || model.id }]
+        models: [...config.models, { 
+          id: model.id, 
+          nickname: model.name || model.id,
+          isMultimodal: model.isMultimodal || false,
+        }]
       });
     }
   };
@@ -306,14 +368,139 @@ export default function SettingsPanel() {
               >
                 Models
               </button>
+              <button
+                onClick={() => setActiveTab("storage")}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  activeTab === "storage"
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                    : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                }`}
+              >
+                Storage
+              </button>
             </div>
 
             {/* Content */}
             <div className="flex-1 overflow-hidden min-h-0">
               {activeTab === "general" ? (
                 <div className="p-6 space-y-6 h-full overflow-y-auto overscroll-contain">
-                  <div className="text-center py-12 text-zinc-400">
-                    General settings coming soon...
+                  <div className="space-y-4">
+                    {/* Dark Mode Toggle */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-medium text-zinc-900 dark:text-white">Dark Mode</h3>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                          {theme === 'dark' ? 'Enabled' : 'Disabled'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${theme === 'dark' ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${theme === 'dark' ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+
+                    {/* Cloud Sync */}
+                    <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-medium text-zinc-900 dark:text-white">Cloud Sync</h3>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                            {syncStatus === 'syncing' ? 'Syncing...' : 
+                             syncStatus === 'error' ? `Error: ${syncError}` :
+                             lastSyncedAt ? `Last: ${new Date(lastSyncedAt).toLocaleTimeString()}` : 'Not synced'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => syncToRemote()}
+                            disabled={syncStatus === 'syncing'}
+                            className="text-xs text-amber-600 hover:text-amber-700 disabled:opacity-50 transition-colors"
+                          >
+                            {syncStatus === 'syncing' ? 'Syncing...' : 'Upload'}
+                          </button>
+                          <button
+                            onClick={() => syncFromRemote()}
+                            disabled={syncStatus === 'syncing'}
+                            className="text-xs text-amber-600 hover:text-amber-700 disabled:opacity-50 transition-colors"
+                          >
+                            Download
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : activeTab === "storage" ? (
+                <div className="p-6 space-y-5 h-full overflow-y-auto overscroll-contain">
+                  <div>
+                    <h3 className="text-lg font-semibold text-zinc-900 dark:text-white mb-1">Cloudflare R2 Storage</h3>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Configure R2 storage for session sync.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">R2 Endpoint</label>
+                    <input
+                      type="text"
+                      value={storageConfig.endpoint}
+                      onChange={(e) => setStorageConfig({ endpoint: e.target.value })}
+                      placeholder="https://<account-id>.r2.cloudflarestorage.com"
+                      className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Bucket Name</label>
+                    <input
+                      type="text"
+                      value={storageConfig.bucket}
+                      onChange={(e) => setStorageConfig({ bucket: e.target.value })}
+                      placeholder="chatflow-sessions"
+                      className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Access Key ID</label>
+                    <input
+                      type="text"
+                      value={storageConfig.accessKeyId}
+                      onChange={(e) => setStorageConfig({ accessKeyId: e.target.value })}
+                      placeholder="Enter your R2 access key ID"
+                      className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Secret Access Key</label>
+                    <input
+                      type="password"
+                      value={storageConfig.secretAccessKey}
+                      onChange={(e) => setStorageConfig({ secretAccessKey: e.target.value })}
+                      placeholder="Enter your R2 secret access key"
+                      className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm font-mono"
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      onClick={() => syncToRemote()}
+                      disabled={syncStatus === 'syncing' || !storageConfig.endpoint || !storageConfig.accessKeyId}
+                      className="px-4 py-2 text-sm font-medium rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+                    >
+                      {syncStatus === 'syncing' ? 'Testing...' : 'Test Connection & Sync'}
+                    </button>
+                    {syncStatus === 'error' && <p className="mt-2 text-xs text-red-500">{syncError}</p>}
+                    {lastSyncedAt && syncStatus === 'idle' && (
+                      <p className="mt-2 text-xs text-green-600 dark:text-green-400">✓ Connected. Last sync: {new Date(lastSyncedAt).toLocaleString()}</p>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      <strong>Tip:</strong> You can also use environment variables (R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET).
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -449,6 +636,7 @@ export default function SettingsPanel() {
                                 <tr>
                                   <th className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800">Nick name</th>
                                   <th className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800">Model ID</th>
+                                  <th className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800 w-28">Capabilities</th>
                                   <th className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800 w-20 text-center">Actions</th>
                                 </tr>
                               </thead>
@@ -474,6 +662,15 @@ export default function SettingsPanel() {
                                     <td className="px-4 py-2 font-mono text-xs text-zinc-500 truncate max-w-[200px]">
                                       {model.id}
                                     </td>
+                                    <td className="px-4 py-2">
+                                      {model.isMultimodal ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                                          Vision
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-zinc-400">—</span>
+                                      )}
+                                    </td>
                                     <td className="px-4 py-2 text-center">
                                       <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
@@ -493,7 +690,7 @@ export default function SettingsPanel() {
                                 ))}
                                 {(providerConfigs[selectedProvider]?.models || []).length === 0 && (
                                   <tr>
-                                    <td colSpan={3} className="px-4 py-8 text-center text-zinc-400 italic">
+                                    <td colSpan={4} className="px-4 py-8 text-center text-zinc-400 italic">
                                       No models configured. Click &quot;New&quot; to add models.
                                     </td>
                                   </tr>
@@ -630,10 +827,17 @@ export default function SettingsPanel() {
                           }}
                           className="w-4 h-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500"
                         />
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                            {model.name}
-                          </span>
+                        <div className="flex flex-col flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-zinc-900 dark:text-white">
+                              {model.name}
+                            </span>
+                            {model.isMultimodal && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                                Vision
+                              </span>
+                            )}
+                          </div>
                           <span className="text-xs text-zinc-500 font-mono">
                             {model.id}
                           </span>
@@ -661,7 +865,7 @@ export default function SettingsPanel() {
                     
                     const newModels = selectedList
                       .filter(m => !existingIds.has(m.id))
-                      .map(m => ({ id: m.id, nickname: m.name || m.id }));
+                      .map(m => ({ id: m.id, nickname: m.name || m.id, isMultimodal: m.isMultimodal || false }));
                     
                     updateProviderConfig(selectedProvider, {
                       models: [...config.models, ...newModels]

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #fafafa;
@@ -12,11 +13,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 body {
@@ -58,6 +57,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -67,6 +67,7 @@ body {
   from {
     transform: scale(0.95);
   }
+
   to {
     transform: scale(1);
   }
@@ -95,12 +96,48 @@ body {
   background: #a1a1aa;
 }
 
-@media (prefers-color-scheme: dark) {
-  ::-webkit-scrollbar-thumb {
-    background: #3f3f46;
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: #52525b;
-  }
+.dark ::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* KaTeX overrides for better formula rendering */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5em 0;
+  margin: 1em 0;
+  scrollbar-width: thin;
+  max-width: 100%;
+}
+
+.katex {
+  font-size: 1.1em;
+  text-rendering: optimizeLegibility;
+}
+
+/* Fix Tailwind Typography conflicts */
+.prose .katex-display {
+  margin-top: 1em;
+  margin-bottom: 1em;
+  user-select: all;
+  /* Allow selecting the formula */
+}
+
+/* Ensure equation numbers (if any) don't get cut off */
+.katex-display>.katex {
+  white-space: normal;
+}
+
+/* Better scrolling for code blocks as well since we are here */
+.prose pre {
+  overflow-x: auto;
+  padding: 1em;
+  border-radius: 0.5rem;
+  background-color: var(--background);
+  border: 1px solid var(--foreground);
+  opacity: 0.1;
 }

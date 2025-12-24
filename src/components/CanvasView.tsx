@@ -26,7 +26,6 @@ export default function CanvasView() {
     nodes: storeNodes, 
     edges: storeEdges, 
     setNodes, 
-    setEdges,
     setViewMode 
   } = useChatFlowStore();
 
@@ -94,10 +93,14 @@ export default function CanvasView() {
         fitView
         minZoom={0.1}
         maxZoom={2}
+        nodesDraggable={true}
+        nodesConnectable={true}
+        elementsSelectable={true}
         defaultEdgeOptions={{
           type: "smoothstep",
           animated: true,
         }}
+        proOptions={{ hideAttribution: true }}
       >
         <Controls />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
@@ -107,12 +110,12 @@ export default function CanvasView() {
       <button
         onClick={() => setViewMode("focus")}
         className="absolute top-4 left-4 z-50 flex items-center gap-2 px-3 py-2 bg-white dark:bg-zinc-800 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors text-sm font-medium text-zinc-700 dark:text-zinc-200"
-        title="Back to Focus View"
+        title="Back to Chat View"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
         </svg>
-        Focus
+        Chat
       </button>
     </div>
   );

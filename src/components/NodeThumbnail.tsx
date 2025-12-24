@@ -18,11 +18,19 @@ export default function NodeThumbnail({ nodeId, isActive, onClick }: NodeThumbna
   
   // Get preview content
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
-  const lastAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
   
+  // Extract text content from message (handles both string and multimodal array formats)
+  const getTextContent = (content: string | Array<{ type: string; text?: string }> | undefined): string => {
+    if (!content) return "";
+    if (typeof content === "string") return content;
+    // For multimodal content, find the first text part
+    const textPart = content.find((part) => part.type === "text");
+    return textPart?.text || "";
+  };
+
   const previewText = reference 
     ? `📌 ${reference.slice(0, 50)}...`
-    : lastUserMessage?.content?.slice(0, 50) || "New conversation";
+    : getTextContent(lastUserMessage?.content)?.slice(0, 50) || "New conversation";
 
   return (
     <div

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, KeyboardEvent, FormEvent } from "react";
-import { useChatFlowStore, type Message } from "@/store";
+import { useChatFlowStore, type Message, type MessageContent, getMessageText } from "@/store";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -16,16 +16,20 @@ function preprocessLaTeX(content: string): string {
   let processed = content;
   
   // Replace \begin{equation*}...\end{equation*} with $$ ... $$
-  processed = processed.replace(/\\begin\{equation\*?\}([\s\S]+?)\\end\{equation\*?\}/g, (_, p1) => `$$${p1.trim()}$$`);
+  processed = processed.replace(/(\$\$)?\s*(\\begin\{equation\*?\}([\s\S]+?)\\end\{equation\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$${content.trim()}$$`);
   
-  // Replace \begin{align}...\end{align} with $$ ... $$
-  processed = processed.replace(/\\begin\{align\*?\}([\s\S]+?)\\end\{align\*?\}/g, (_, p1) => `$$\\begin{aligned}${p1}\\end{aligned}$$`);
+  // Replace \begin{align}...\end{align} with $$ \begin{aligned} ... \end{aligned} $$
+  processed = processed.replace(/(\$\$)?\s*(\\begin\{align\*?\}([\s\S]+?)\\end\{align\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$\\begin{aligned}${content}\\end{aligned}$$`);
   
-  // Replace \begin{gather}...\end{gather} with $$ ... $$
-  processed = processed.replace(/\\begin\{gather\*?\}([\s\S]+?)\\end\{gather\*?\}/g, (_, p1) => `$$\\begin{gathered}${p1}\\end{gathered}$$`);
+  // Replace \begin{gather}...\end{gather} with $$ \begin{gathered} ... \end{gathered} $$
+  processed = processed.replace(/(\$\$)?\s*(\\begin\{gather\*?\}([\s\S]+?)\\end\{gather\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$\\begin{gathered}${content}\\end{gathered}$$`);
   
   // Replace \begin{matrix}...\end{matrix} variants
-  processed = processed.replace(/\\begin\{(b?p?v?B?V?matrix)\}([\s\S]+?)\\end\{\1\}/g, (_, type, p1) => `$$\\begin{${type}}${p1}\\end{${type}}$$`);
+  // For matrix environments, we only wrap in $$ if they aren't already wrapped.
+  processed = processed.replace(/(\$\$)?\s*(\\begin\{(matrix|pmatrix|bmatrix|vmatrix|Vmatrix)\}[\s\S]+?\\end\{\3\})\s*(\$\$)?/g, (match, pre, env, type, post) => {
+    if (pre === '$$' && post === '$$') return match;
+    return `$$${env}$$`;
+  });
   
   // Replace \[ ... \] with $$ ... $$ (display math)
   processed = processed.replace(/\\\[([\s\S]+?)\\\]/g, (_, p1) => `$$${p1.trim()}$$`);
@@ -38,9 +42,10 @@ function preprocessLaTeX(content: string): string {
 
 interface FocusViewProps {
   nodeId: string;
+  isSidebarCollapsed?: boolean;
 }
 
-export default function FocusView({ nodeId }: FocusViewProps) {
+export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusViewProps) {
   const {
     apiKey: legacyApiKey,
     baseUrl: legacyBaseUrl,
@@ -55,15 +60,19 @@ export default function FocusView({ nodeId }: FocusViewProps) {
 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [floatingPos, setFloatingPos] = useState<{ x: number; y: number } | null>(null);
   const [showBranchButton, setShowBranchButton] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [isTextareaFocused, setIsTextareaFocused] = useState(false);
 
@@ -81,6 +90,7 @@ export default function FocusView({ nodeId }: FocusViewProps) {
   const currentApiKey = currentConfig.apiKey || legacyApiKey;
   const currentBaseUrl = currentConfig.baseUrl || legacyBaseUrl;
   const currentModelId = currentConfig.selectedModelId || legacyModelId;
+  const isMultimodalModel = currentConfig.models?.find(m => m.id === currentModelId)?.isMultimodal;
 
   // Handle text selection for branching
   const handleSelectionChange = useCallback(() => {
@@ -153,10 +163,63 @@ export default function FocusView({ nodeId }: FocusViewProps) {
     window.getSelection()?.removeAllRanges();
   }, []);
 
-  // Auto-scroll to bottom
+  // Image file handling
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (!file.type.startsWith('image/')) {
+        console.error("Please upload an image file");
+        return;
+      }
+      setIsProcessingImage(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+        setIsProcessingImage(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  }, []);
+
+  const clearSelectedImage = useCallback(() => {
+    setSelectedImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    if (!isMultimodalModel) return;
+    
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          setIsProcessingImage(true);
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setSelectedImage(reader.result as string);
+            setIsProcessingImage(false);
+          };
+          reader.readAsDataURL(file);
+        }
+        break;
+      }
+    }
+  }, [isMultimodalModel]);
+
+  // Auto-scroll to bottom - debounced to prevent jumping during streaming
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const timeoutId = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [messages.length]);
 
   // Extracted AI request logic for reuse
   const sendAiRequest = useCallback(
@@ -261,17 +324,25 @@ export default function FocusView({ nodeId }: FocusViewProps) {
   const onSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      if (!input.trim() || !currentApiKey || isLoading) return;
+      if ((!input.trim() && !selectedImage) || !currentApiKey || isLoading) return;
+
+      const content: MessageContent = selectedImage 
+        ? [
+            { type: "text", text: input.trim() },
+            { type: "image_url", image_url: { url: selectedImage } }
+          ]
+        : input.trim();
 
       const userMessage: Message = {
         id: Date.now().toString(),
         role: "user",
-        content: input.trim(),
+        content,
       };
 
       const newMessages = [...messages, userMessage];
       updateNodeData(nodeId, { messages: newMessages });
       setInput("");
+      setSelectedImage(null);
       
       // Reset textarea cursor position and trigger update
       setTimeout(() => {
@@ -285,11 +356,12 @@ export default function FocusView({ nodeId }: FocusViewProps) {
       
       await sendAiRequest(newMessages);
     },
-    [input, currentApiKey, isLoading, messages, updateNodeData, nodeId, sendAiRequest]
+    [input, selectedImage, currentApiKey, isLoading, messages, updateNodeData, nodeId, sendAiRequest]
   );
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Don't submit if user is using IME (e.g., Chinese, Japanese input)
+    if (e.key === "Enter" && !e.shiftKey && !isComposing) {
       e.preventDefault();
       onSubmit(e as unknown as FormEvent);
     }
@@ -301,9 +373,28 @@ export default function FocusView({ nodeId }: FocusViewProps) {
       className="flex flex-col h-full bg-white dark:bg-zinc-900 relative"
     >
       {/* Top bar with model selector */}
-      <div className="shrink-0 flex items-center gap-2 px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+      <div className={`shrink-0 flex items-center gap-2 px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 ${
+        isSidebarCollapsed ? "pl-14" : "px-4"
+      }`}>
         <ModelSelector />
         <div className="flex-1" />
+        {/* Flow button */}
+        <button
+          onClick={() => setViewMode("canvas")}
+          disabled={messages.length === 0}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm text-zinc-700 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title={messages.length === 0 ? "Flow view requires at least one message" : "Flow View"}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3" strokeWidth={2} />
+            <circle cx="6" cy="6" r="2" strokeWidth={2} />
+            <circle cx="18" cy="6" r="2" strokeWidth={2} />
+            <circle cx="6" cy="18" r="2" strokeWidth={2} />
+            <circle cx="18" cy="18" r="2" strokeWidth={2} />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 10l-2.5-2.5M14 10l2.5-2.5M10 14l-2.5 2.5M14 14l2.5 2.5" />
+          </svg>
+          <span>Flow</span>
+        </button>
       </div>
 
       {/* Reference indicator for branches */}
@@ -347,7 +438,26 @@ export default function FocusView({ nodeId }: FocusViewProps) {
             >
               {message.role === "user" ? (
                 <div className="max-w-[80%] px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 rounded-2xl text-zinc-900 dark:text-zinc-100">
-                  {message.content}
+                  {/* Handle structured content (images) */}
+                  {typeof message.content !== "string" && Array.isArray(message.content) ? (
+                    <div className="space-y-2">
+                       {message.content.map((part, i) => {
+                         if (part.type === "image_url") {
+                           return (
+                             <img 
+                               key={i} 
+                               src={part.image_url.url} 
+                               alt="User uploaded" 
+                               className="max-w-full rounded-lg max-h-64 object-contain"
+                             />
+                           );
+                         }
+                         return <div key={i}>{part.text}</div>;
+                       })}
+                    </div>
+                  ) : (
+                    message.content
+                  )}
                 </div>
               ) : (
                 <div className="prose prose-zinc dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-800 prose-code:text-amber-600 dark:prose-code:text-amber-400 prose-code:before:content-none prose-code:after:content-none text-zinc-900 dark:text-zinc-100">
@@ -355,7 +465,7 @@ export default function FocusView({ nodeId }: FocusViewProps) {
                     remarkPlugins={[remarkGfm, remarkMath]} 
                     rehypePlugins={[rehypeKatex]}
                   >
-                    {preprocessLaTeX(message.content)}
+                    {preprocessLaTeX(getMessageText(message.content))}
                   </ReactMarkdown>
                 </div>
               )}
@@ -373,52 +483,98 @@ export default function FocusView({ nodeId }: FocusViewProps) {
         </div>
       </div>
 
-      {/* Input area - fixed at bottom */}
-      <div className="shrink-0 bg-white dark:bg-zinc-900 px-4 pb-6 pt-4">
+      {/* Input area - sticky at bottom */}
+      <div className="sticky bottom-0 shrink-0 bg-white dark:bg-zinc-900 px-4 pb-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">
         <form onSubmit={onSubmit} className="max-w-4xl mx-auto">
-          <div className="relative flex items-center gap-3 px-4 py-3 rounded-3xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 shadow-sm focus-within:border-zinc-300 dark:focus-within:border-zinc-600 transition-colors">
-            {/* Custom smooth caret overlay */}
-            <SmoothCaret textareaRef={textareaRef} isActive={isTextareaFocused} />
-            
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setIsTextareaFocused(true)}
-              onBlur={() => setIsTextareaFocused(false)}
-              placeholder="Message ChatFlow"
-              disabled={!currentApiKey || isLoading}
-              className="flex-1 resize-none bg-transparent text-[15px] leading-6 focus:outline-none disabled:opacity-50 max-h-48 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
-              rows={1}
-              style={{ 
-                fieldSizing: "content",
-                caretColor: "transparent"
-              } as React.CSSProperties}
-            />
-            <div className="flex items-center gap-2">
-              {isLoading ? (
+          <div className="relative flex flex-col gap-2 p-2 rounded-3xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 shadow-sm focus-within:border-zinc-300 dark:focus-within:border-zinc-600 transition-colors">
+            {/* Image Preview */}
+            {selectedImage && (
+              <div className="relative inline-block w-fit px-2 pt-2">
+                <img src={selectedImage} alt="Preview" className="h-20 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700" />
                 <button
                   type="button"
-                  onClick={() => abortControllerRef.current?.abort()}
-                  className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors shrink-0"
-                  title="Stop"
+                  onClick={clearSelectedImage}
+                  className="absolute -top-1 -right-1 p-0.5 bg-zinc-500 text-white rounded-full hover:bg-zinc-600 transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <rect x="6" y="6" width="12" height="12" rx="1" />
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!currentApiKey || !input.trim()}
-                  className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                  </svg>
-                </button>
-              )}
+              </div>
+            )}
+            
+            <div className="flex items-center gap-2 pl-2">
+               {/* File Input (Hidden) */}
+               <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                accept="image/*"
+                className="hidden"
+               />
+               
+               {/* Upload Button */}
+               {isMultimodalModel && (
+                 <button
+                   type="button"
+                   onClick={() => fileInputRef.current?.click()}
+                   disabled={isLoading || isProcessingImage}
+                   className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50"
+                   title="Upload image"
+                 >
+                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                   </svg>
+                 </button>
+               )}
+
+              <div className="relative flex-1">
+                <SmoothCaret textareaRef={textareaRef} isActive={isTextareaFocused} />
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => setIsComposing(false)}
+                  onFocus={() => setIsTextareaFocused(true)}
+                  onBlur={() => setIsTextareaFocused(false)}
+                  placeholder={isMultimodalModel ? "Message ChatFlow (image supported)" : "Message ChatFlow"}
+                  disabled={!currentApiKey || isLoading}
+                  className="w-full resize-none bg-transparent text-[15px] leading-6 focus:outline-none disabled:opacity-50 max-h-48 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 pt-[11px] pb-2"
+                  rows={1}
+                  style={{ 
+                    fieldSizing: "content", 
+                    caretColor: "transparent"
+                  } as React.CSSProperties}
+                />
+              </div>
+
+                <div className="flex items-center gap-2 pr-2">
+                {isLoading ? (
+                  <button
+                    type="button"
+                    onClick={() => abortControllerRef.current?.abort()}
+                    className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors shrink-0"
+                    title="Stop"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="6" width="12" height="12" rx="1" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!currentApiKey || (!input.trim() && !selectedImage) || isProcessingImage}
+                    className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </form>

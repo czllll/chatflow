@@ -19,6 +19,7 @@ export default function BranchButton({
   const { createBranch } = useChatFlowStore();
   const [showInput, setShowInput] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus input when shown
@@ -44,7 +45,8 @@ export default function BranchButton({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Don't submit if user is using IME (e.g., Chinese, Japanese input)
+    if (e.key === "Enter" && !e.shiftKey && !isComposing) {
       e.preventDefault();
       handleSubmit(e);
     }
@@ -83,6 +85,8 @@ export default function BranchButton({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
             placeholder="Ask about this..."
             className="w-full resize-none rounded-lg border border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 nodrag"
             rows={2}

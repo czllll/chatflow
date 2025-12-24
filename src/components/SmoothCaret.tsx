@@ -45,8 +45,8 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
 
       animationFrameRef.current = requestAnimationFrame(() => {
         setCaretPosition({ 
-          x: coordinates.left + 16,
-          y: coordinates.top + 16
+          x: coordinates.left,
+          y: coordinates.top 
         });
       });
     };
