@@ -310,7 +310,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
           // Save current session state before creating new one
           const updatedSessions = state.sessions.map((s) =>
             s.id === state.activeSessionId
-              ? { ...s, nodes: state.nodes, edges: state.edges, updatedAt: Date.now() }
+              ? { ...s, nodes: state.nodes, edges: state.edges }
               : s
           );
           
@@ -370,7 +370,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
           // Save current session state before switching
           const updatedSessions = state.sessions.map((s) =>
             s.id === state.activeSessionId
-              ? { ...s, nodes: state.nodes, edges: state.edges, updatedAt: Date.now() }
+              ? { ...s, nodes: state.nodes, edges: state.edges }
               : s
           );
           
@@ -499,30 +499,60 @@ export const useChatFlowStore = create<ChatFlowState>()(
 
         updateNodeData: (id, data) =>
           set((state) => {
-            const newNodes = state.nodes.map((node) =>
-              node.id === id
-                ? { ...node, data: { ...node.data, ...data } }
-                : node
-            );
-            
-            // Auto-generate title from first message if still "New Chat"
-            const currentSession = state.sessions.find(s => s.id === state.activeSessionId);
-            const shouldUpdateTitle = currentSession?.title === "New Chat" && 
-              newNodes.some(n => n.data.messages.length > 0);
-            
-            return {
-              nodes: newNodes,
-              sessions: state.sessions.map((s) =>
-                s.id === state.activeSessionId
-                  ? { 
-                      ...s, 
-                      nodes: newNodes, 
+            // 1. Check if the node is in the active session (optimization)
+            const isActiveNode = state.nodes.some((n) => n.id === id);
+
+            if (isActiveNode) {
+              // Standard update for active session
+              const newNodes = state.nodes.map((node) =>
+                node.id === id
+                  ? { ...node, data: { ...node.data, ...data } }
+                  : node
+              );
+              
+              const currentSession = state.sessions.find(s => s.id === state.activeSessionId);
+              const shouldUpdateTitle = currentSession?.title === "New Chat" && 
+                newNodes.some(n => n.data.messages.length > 0);
+              
+              return {
+                nodes: newNodes,
+                sessions: state.sessions.map((s) =>
+                  s.id === state.activeSessionId
+                    ? { 
+                        ...s, 
+                        nodes: newNodes, 
+                        updatedAt: Date.now(),
+                        title: shouldUpdateTitle ? generateSessionTitle(newNodes) : s.title
+                      }
+                    : s
+                ),
+              };
+            } else {
+              // 2. Handle background update (find the session that contains this node)
+              return {
+                sessions: state.sessions.map((s) => {
+                  const nodeExists = s.nodes.some((n) => n.id === id);
+                  if (nodeExists) {
+                    const newNodes = s.nodes.map((node) =>
+                      node.id === id
+                        ? { ...node, data: { ...node.data, ...data } }
+                        : node
+                    );
+
+                    const shouldUpdateTitle = s.title === "New Chat" && 
+                      newNodes.some(n => n.data.messages.length > 0);
+
+                    return {
+                      ...s,
+                      nodes: newNodes,
                       updatedAt: Date.now(),
-                      title: shouldUpdateTitle ? generateSessionTitle(newNodes) : s.title
-                    }
-                  : s
-              ),
-            };
+                      title: shouldUpdateTitle ? generateSessionTitle(newNodes) : s.title,
+                    };
+                  }
+                  return s;
+                }),
+              };
+            }
           }),
 
         setNodes: (nodes) =>

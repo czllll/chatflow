@@ -10,34 +10,8 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
-// Preprocess LaTeX: convert various LaTeX formats to $ and $$ for KaTeX compatibility
-function preprocessLaTeX(content: string): string {
-  let processed = content;
-  
-  // Replace \begin{equation*}...\end{equation*} with $$ ... $$
-  processed = processed.replace(/(\$\$)?\s*(\\begin\{equation\*?\}([\s\S]+?)\\end\{equation\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$${content.trim()}$$`);
-  
-  // Replace \begin{align}...\end{align} with $$ \begin{aligned} ... \end{aligned} $$
-  processed = processed.replace(/(\$\$)?\s*(\\begin\{align\*?\}([\s\S]+?)\\end\{align\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$\\begin{aligned}${content}\\end{aligned}$$`);
-  
-  // Replace \begin{gather}...\end{gather} with $$ \begin{gathered} ... \end{gathered} $$
-  processed = processed.replace(/(\$\$)?\s*(\\begin\{gather\*?\}([\s\S]+?)\\end\{gather\*?\})\s*(\$\$)?/g, (_, pre, env, content, post) => `$$\\begin{gathered}${content}\\end{gathered}$$`);
-  
-  // Replace \begin{matrix}...\end{matrix} variants
-  // For matrix environments, we only wrap in $$ if they aren't already wrapped.
-  processed = processed.replace(/(\$\$)?\s*(\\begin\{(matrix|pmatrix|bmatrix|vmatrix|Vmatrix)\}[\s\S]+?\\end\{\3\})\s*(\$\$)?/g, (match, pre, env, type, post) => {
-    if (pre === '$$' && post === '$$') return match;
-    return `$$${env}$$`;
-  });
-  
-  // Replace \[ ... \] with $$ ... $$ (display math)
-  processed = processed.replace(/\\\[([\s\S]+?)\\\]/g, (_, p1) => `$$${p1.trim()}$$`);
-  
-  // Replace \( ... \) with $ ... $ (inline math)
-  processed = processed.replace(/\\\((.+?)\\\)/g, (_, p1) => `$${p1}$`);
-  
-  return processed;
-}
+import { preprocessLaTeX } from "@/utils/latex";
+
 
 type ChatNodeType = Node<ChatNodeData, "chatNode">;
 
