@@ -273,6 +273,16 @@ export default function FocusView({ nodeId }: FocusViewProps) {
       updateNodeData(nodeId, { messages: newMessages });
       setInput("");
       
+      // Reset textarea cursor position and trigger update
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(0, 0);
+          // Trigger input event to update custom caret position
+          textareaRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+          textareaRef.current.dispatchEvent(new Event('click', { bubbles: true }));
+        }
+      }, 0);
+      
       await sendAiRequest(newMessages);
     },
     [input, currentApiKey, isLoading, messages, updateNodeData, nodeId, sendAiRequest]
@@ -387,20 +397,11 @@ export default function FocusView({ nodeId }: FocusViewProps) {
               } as React.CSSProperties}
             />
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-colors"
-                title="Voice input"
-              >
-                <svg className="w-5 h-5 text-zinc-600 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-              </button>
               {isLoading ? (
                 <button
                   type="button"
                   onClick={() => abortControllerRef.current?.abort()}
-                  className="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full transition-colors shrink-0"
+                  className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors shrink-0"
                   title="Stop"
                 >
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -411,7 +412,7 @@ export default function FocusView({ nodeId }: FocusViewProps) {
                 <button
                   type="submit"
                   disabled={!currentApiKey || !input.trim()}
-                  className="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
+                  className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />

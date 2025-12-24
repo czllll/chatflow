@@ -45,8 +45,8 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
 
       animationFrameRef.current = requestAnimationFrame(() => {
         setCaretPosition({ 
-          x: coordinates.left + 16, // Add padding offset
-          y: coordinates.top + 12  // Add padding offset
+          x: coordinates.left + 16,
+          y: coordinates.top + 16
         });
       });
     };
@@ -85,7 +85,7 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
       {/* Main caret line */}
       <div className="relative">
         <div
-          className="w-0.5 h-6 bg-purple-600 dark:bg-purple-500"
+          className="w-0.5 h-5 bg-amber-600 dark:bg-amber-500"
           style={{
             animation: "blink 1s step-end infinite",
           }}
@@ -93,17 +93,17 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
         
         {/* Comet tail effect - multiple layers for visibility */}
         <div
-          className="absolute top-0 -left-1 w-2 h-8 bg-gradient-to-b from-purple-500 via-purple-400/60 to-transparent"
+          className="absolute top-0 -left-0.5 w-1.5 h-6 bg-gradient-to-b from-amber-500 via-amber-400/60 to-transparent"
           style={{
-            filter: "blur(3px)",
+            filter: "blur(2px)",
             animation: "tail-glow 1s ease-in-out infinite",
             transformOrigin: "top center",
           }}
         />
         <div
-          className="absolute top-0 -left-0.5 w-1 h-6 bg-gradient-to-b from-purple-500/90 via-purple-400/50 to-transparent"
+          className="absolute top-0 -left-0.5 w-1 h-5 bg-gradient-to-b from-amber-500/90 via-amber-400/50 to-transparent"
           style={{
-            filter: "blur(1px)",
+            filter: "blur(0.5px)",
             animation: "tail-glow 1s ease-in-out infinite 0.1s",
           }}
         />
@@ -122,11 +122,11 @@ export default function SmoothCaret({ textareaRef, isActive }: SmoothCaretProps)
         @keyframes tail-glow {
           0%, 100% {
             opacity: 0.5;
-            transform: scaleY(1.3);
+            transform: scaleY(1.2);
           }
           50% {
-            opacity: 1;
-            transform: scaleY(2);
+            opacity: 0.9;
+            transform: scaleY(1.6);
           }
         }
       `}</style>
