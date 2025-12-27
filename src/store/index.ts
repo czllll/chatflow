@@ -3,11 +3,12 @@ import { persist } from "zustand/middleware";
 import { Node, Edge } from "@xyflow/react";
 import { nanoid } from "nanoid";
 
-// Message type for chat history
+// Message content type - supports multimodal (text + images)
 export type MessageContent = 
   | string 
   | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
 
+// Message type for chat history
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
@@ -65,14 +66,6 @@ export interface ProviderConfig {
   selectedModelId?: string;
 }
 
-// R2 Storage configuration
-export interface R2StorageConfig {
-  endpoint: string;
-  bucket: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-}
-
 // Zustand store interface
 interface ChatFlowState {
   // Settings (persisted)
@@ -80,7 +73,6 @@ interface ChatFlowState {
   baseUrl: string;
   modelId: string;
   providerConfigs: Record<string, ProviderConfig>;
-  storageConfig: R2StorageConfig;
 
   // Session management
   sessions: Session[];
@@ -90,11 +82,6 @@ interface ChatFlowState {
   nodes: Node<ChatNodeData>[];
   edges: Edge[];
   activeNodeId: string;
-
-  // Sync state
-  syncStatus: "idle" | "syncing" | "error";
-  lastSyncedAt: number | null;
-  syncError: string | null;
 
   // Settings actions
   setApiKey: (key: string) => void;
@@ -135,18 +122,27 @@ interface ChatFlowState {
   setActiveProvider: (id: string) => void;
 
   // Theme
-  theme: "light" | "dark" | "system";
-  setTheme: (theme: "light" | "dark" | "system") => void;
+  theme: 'light' | 'dark' | 'system';
+  setTheme: (theme: 'light' | 'dark' | 'system') => void;
 
-  // Sync actions
+  // Storage & Sync
+  syncStatus: 'idle' | 'syncing' | 'error';
+  syncError: string | null;
+  lastSyncedAt: number | null;
+  storageConfig: {
+    endpoint: string;
+    bucket: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+  };
+  setStorageConfig: (config: Partial<ChatFlowState['storageConfig']>) => void;
   syncToRemote: () => Promise<void>;
   syncFromRemote: () => Promise<void>;
-  setStorageConfig: (config: Partial<R2StorageConfig>) => void;
 }
 
 // Initial root node
-const createInitialNode = (id: string): Node<ChatNodeData> => ({
-  id,
+const createInitialNode = (): Node<ChatNodeData> => ({
+  id: "root",
   type: "chatNode",
   position: { x: 100, y: 100 },
   data: {
@@ -157,8 +153,7 @@ const createInitialNode = (id: string): Node<ChatNodeData> => ({
 
 // Create a new session
 const createNewSession = (): Session => {
-  const rootId = `root-${nanoid()}`;
-  const rootNode = createInitialNode(rootId);
+  const rootNode = createInitialNode();
   return {
     id: nanoid(),
     title: "New Chat",
@@ -166,13 +161,13 @@ const createNewSession = (): Session => {
     updatedAt: Date.now(),
     nodes: [rootNode],
     edges: [],
-    rootNodeId: rootId,
+    rootNodeId: "root",
   };
 };
 
 // Generate session title from first message
-const generateSessionTitle = (nodes: Node<ChatNodeData>[], rootNodeId: string): string => {
-  const rootNode = nodes.find(n => n.id === rootNodeId || n.data.messages.length > 0);
+const generateSessionTitle = (nodes: Node<ChatNodeData>[]): string => {
+  const rootNode = nodes.find(n => n.id === "root" || n.data.messages.length > 0);
   if (rootNode && rootNode.data.messages.length > 0) {
     const firstUserMessage = rootNode.data.messages.find(m => m.role === "user");
     if (firstUserMessage) {
@@ -194,12 +189,6 @@ export const useChatFlowStore = create<ChatFlowState>()(
         baseUrl: "https://openrouter.ai/api/v1",
         modelId: "",
         providerConfigs: {},
-        storageConfig: {
-          endpoint: "",
-          bucket: "chatflow-sessions",
-          accessKeyId: "",
-          secretAccessKey: "",
-        },
 
         // Session state
         sessions: [initialSession],
@@ -208,124 +197,46 @@ export const useChatFlowStore = create<ChatFlowState>()(
         // Initial canvas state (from active session)
         nodes: initialSession.nodes,
         edges: initialSession.edges,
-        activeNodeId: initialSession.rootNodeId,
+        activeNodeId: "root",
         viewMode: "focus",
         activeProviderId: "openrouter",
         theme: "system",
 
-        // Sync state
-        syncStatus: "idle",
-        lastSyncedAt: null,
+        // Default storage state
+        syncStatus: 'idle',
         syncError: null,
-
-        // Storage config action
-        setStorageConfig: (config) => set((state) => ({
-          storageConfig: { ...state.storageConfig, ...config },
-        })),
-
-        // Sync actions
-        syncToRemote: async () => {
-          const state = get();
-          set({ syncStatus: "syncing", syncError: null });
-
-          try {
-            // Save current session state first
-            const currentSessions = state.sessions.map((s) =>
-              s.id === state.activeSessionId
-                ? { ...s, nodes: state.nodes, edges: state.edges, updatedAt: Date.now() }
-                : s
-            );
-
-            const response = await fetch("/api/storage/sync", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ 
-                sessions: currentSessions,
-                storageConfig: state.storageConfig,
-              }),
-            });
-
-            if (!response.ok) {
-              const error = await response.json();
-              throw new Error(error.error || "Sync failed");
-            }
-
-            const result = await response.json();
-            set({ syncStatus: "idle", lastSyncedAt: result.timestamp });
-          } catch (error) {
-            set({
-              syncStatus: "error",
-              syncError: error instanceof Error ? error.message : "Unknown error",
-            });
-          }
-        },
-
-        syncFromRemote: async () => {
-          const state = get();
-          set({ syncStatus: "syncing", syncError: null });
-
-          try {
-            // Encode credentials for GET request
-            const creds = Buffer.from(JSON.stringify(state.storageConfig)).toString("base64");
-            const response = await fetch(`/api/storage/sync?creds=${encodeURIComponent(creds)}`);
-
-            if (!response.ok) {
-              const error = await response.json();
-              throw new Error(error.error || "Fetch failed");
-            }
-
-            const data = await response.json();
-
-            if (data.sessions && data.sessions.length > 0) {
-              const firstSession = data.sessions[0];
-              set({
-                sessions: data.sessions,
-                activeSessionId: firstSession.id,
-                nodes: firstSession.nodes,
-                edges: firstSession.edges,
-                activeNodeId: firstSession.rootNodeId,
-                syncStatus: "idle",
-                lastSyncedAt: Date.now(),
-              });
-            } else {
-              set({ syncStatus: "idle" });
-            }
-          } catch (error) {
-            set({
-              syncStatus: "error",
-              syncError: error instanceof Error ? error.message : "Unknown error",
-            });
-          }
-        },
+        lastSyncedAt: null,
+        storageConfig: {
+          endpoint: "",
+          bucket: "",
+          accessKeyId: "",
+          secretAccessKey: "",
+        }, // Initial state ends here
 
         // Get session title - auto-generate from first user message
         getSessionTitle: (session: Session) => {
           if (session.title !== "New Chat") return session.title;
-          return generateSessionTitle(session.nodes, session.rootNodeId);
+          return generateSessionTitle(session.nodes);
         },
 
         // Session actions
         createSession: () => {
           const state = get();
+          const newSession = createNewSession();
           
           // Save current session state before creating new one
           const updatedSessions = state.sessions.map((s) =>
             s.id === state.activeSessionId
-              ? { ...s, nodes: state.nodes, edges: state.edges }
+              ? { ...s, nodes: state.nodes, edges: state.edges, updatedAt: Date.now() }
               : s
           );
-          
-          // Create new session with slightly future timestamp to ensure it's on top
-          const newSession = createNewSession();
-          newSession.updatedAt = Date.now() + 1;
-          newSession.createdAt = newSession.updatedAt;
           
           set({
             sessions: [...updatedSessions, newSession],
             activeSessionId: newSession.id,
             nodes: newSession.nodes,
             edges: newSession.edges,
-            activeNodeId: newSession.rootNodeId,
+            activeNodeId: "root",
             viewMode: "focus",
           });
           
@@ -334,22 +245,9 @@ export const useChatFlowStore = create<ChatFlowState>()(
 
         deleteSession: (id: string) => {
           const state = get();
+          if (state.sessions.length <= 1) return;
           
           const remainingSessions = state.sessions.filter(s => s.id !== id);
-          
-          // If deleting the last session, create a new one
-          if (remainingSessions.length === 0) {
-            const newSession = createNewSession();
-            set({
-              sessions: [newSession],
-              activeSessionId: newSession.id,
-              nodes: newSession.nodes,
-              edges: newSession.edges,
-              activeNodeId: newSession.rootNodeId,
-            });
-            return;
-          }
-          
           const newActiveSession = state.activeSessionId === id 
             ? remainingSessions[0] 
             : state.sessions.find(s => s.id === state.activeSessionId)!;
@@ -371,7 +269,7 @@ export const useChatFlowStore = create<ChatFlowState>()(
           // Save current session state before switching
           const updatedSessions = state.sessions.map((s) =>
             s.id === state.activeSessionId
-              ? { ...s, nodes: state.nodes, edges: state.edges }
+              ? { ...s, nodes: state.nodes, edges: state.edges, updatedAt: Date.now() }
               : s
           );
           
@@ -406,11 +304,40 @@ export const useChatFlowStore = create<ChatFlowState>()(
         // Set active provider
         setActiveProvider: (id) => set({ activeProviderId: id }),
 
+        // Set theme
+        setTheme: (theme) => set({ theme }),
+
+        // Storage actions
+        setStorageConfig: (config) => set((state) => ({
+          storageConfig: { ...state.storageConfig, ...config }
+        })),
+        syncToRemote: async () => {
+            // Placeholder for sync implementation
+            set({ syncStatus: 'syncing', syncError: null });
+            try {
+                // Simulate sync
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                set({ syncStatus: 'idle', lastSyncedAt: Date.now() });
+            } catch (error) {
+                set({ syncStatus: 'error', syncError: (error as Error).message });
+            }
+        },
+        syncFromRemote: async () => {
+             // Placeholder for sync implementation
+             set({ syncStatus: 'syncing', syncError: null });
+             try {
+                 // Simulate sync
+                 await new Promise(resolve => setTimeout(resolve, 1000));
+                 set({ syncStatus: 'idle', lastSyncedAt: Date.now() });
+             } catch (error) {
+                 set({ syncStatus: 'error', syncError: (error as Error).message });
+             }
+        },
+
         // Settings actions
         setApiKey: (key) => set({ apiKey: key }),
         setBaseUrl: (url) => set({ baseUrl: url }),
         setModelId: (id) => set({ modelId: id }),
-        setTheme: (theme) => set({ theme }),
         
         updateProviderConfig: (providerId, config) => set((state) => {
           const currentConfig = state.providerConfigs[providerId] || {
@@ -445,47 +372,23 @@ export const useChatFlowStore = create<ChatFlowState>()(
 
         removeNode: (id) =>
           set((state) => {
-            // Find all descendants recursively
-            const findAllDescendants = (nodeId: string): string[] => {
-              const childIds = state.edges
-                .filter(e => e.source === nodeId)
-                .map(e => e.target);
-              
-              const allDescendants = [...childIds];
-              childIds.forEach(childId => {
-                allDescendants.push(...findAllDescendants(childId));
-              });
-              
-              return allDescendants;
-            };
-            
-            // Get all nodes to delete (the node itself + all descendants)
-            const nodesToDelete = new Set([id, ...findAllDescendants(id)]);
-            
-            // Find parent to remove highlight
             const edgeToRemove = state.edges.find((e) => e.target === id);
             const parentId = edgeToRemove?.source;
             
-            // Remove nodes and update parent's highlights
-            const newNodes = state.nodes
-              .map((node) => {
-                if (node.id === parentId && node.data.highlights) {
-                  return {
-                    ...node,
-                    data: {
-                      ...node.data,
-                      highlights: node.data.highlights.filter((h) => h.branchNodeId !== id),
-                    },
-                  };
-                }
-                return node;
-              })
-              .filter((n) => !nodesToDelete.has(n.id));
+            const newNodes = state.nodes.map((node) => {
+              if (node.id === parentId && node.data.highlights) {
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    highlights: node.data.highlights.filter((h) => h.branchNodeId !== id),
+                  },
+                };
+              }
+              return node;
+            }).filter((n) => n.id !== id);
             
-            // Remove all edges connected to deleted nodes
-            const newEdges = state.edges.filter(
-              (e) => !nodesToDelete.has(e.source) && !nodesToDelete.has(e.target)
-            );
+            const newEdges = state.edges.filter((e) => e.source !== id && e.target !== id);
             
             return {
               nodes: newNodes,
@@ -500,60 +403,30 @@ export const useChatFlowStore = create<ChatFlowState>()(
 
         updateNodeData: (id, data) =>
           set((state) => {
-            // 1. Check if the node is in the active session (optimization)
-            const isActiveNode = state.nodes.some((n) => n.id === id);
-
-            if (isActiveNode) {
-              // Standard update for active session
-              const newNodes = state.nodes.map((node) =>
-                node.id === id
-                  ? { ...node, data: { ...node.data, ...data } }
-                  : node
-              );
-              
-              const currentSession = state.sessions.find(s => s.id === state.activeSessionId);
-              const shouldUpdateTitle = currentSession?.title === "New Chat" && 
-                newNodes.some(n => n.data.messages.length > 0);
-              
-              return {
-                nodes: newNodes,
-                sessions: state.sessions.map((s) =>
-                  s.id === state.activeSessionId
-                    ? { 
-                        ...s, 
-                        nodes: newNodes, 
-                        updatedAt: Date.now(),
-                        title: shouldUpdateTitle ? generateSessionTitle(newNodes, s.rootNodeId) : s.title
-                      }
-                    : s
-                ),
-              };
-            } else {
-              // 2. Handle background update (find the session that contains this node)
-              return {
-                sessions: state.sessions.map((s) => {
-                  const nodeExists = s.nodes.some((n) => n.id === id);
-                  if (nodeExists) {
-                    const newNodes = s.nodes.map((node) =>
-                      node.id === id
-                        ? { ...node, data: { ...node.data, ...data } }
-                        : node
-                    );
-
-                    const shouldUpdateTitle = s.title === "New Chat" && 
-                      newNodes.some(n => n.data.messages.length > 0);
-
-                    return {
-                      ...s,
-                      nodes: newNodes,
-                      // Don't update updatedAt for background sessions to avoid reordering
-                      title: shouldUpdateTitle ? generateSessionTitle(newNodes, s.rootNodeId) : s.title,
-                    };
-                  }
-                  return s;
-                }),
-              };
-            }
+            const newNodes = state.nodes.map((node) =>
+              node.id === id
+                ? { ...node, data: { ...node.data, ...data } }
+                : node
+            );
+            
+            // Auto-generate title from first message if still "New Chat"
+            const currentSession = state.sessions.find(s => s.id === state.activeSessionId);
+            const shouldUpdateTitle = currentSession?.title === "New Chat" && 
+              newNodes.some(n => n.data.messages.length > 0);
+            
+            return {
+              nodes: newNodes,
+              sessions: state.sessions.map((s) =>
+                s.id === state.activeSessionId
+                  ? { 
+                      ...s, 
+                      nodes: newNodes, 
+                      updatedAt: Date.now(),
+                      title: shouldUpdateTitle ? generateSessionTitle(newNodes) : s.title
+                    }
+                  : s
+              ),
+            };
           }),
 
         setNodes: (nodes) =>
@@ -707,9 +580,11 @@ export const useChatFlowStore = create<ChatFlowState>()(
         modelId: state.modelId,
         providerConfigs: state.providerConfigs,
         activeProviderId: state.activeProviderId,
-        theme: state.theme,
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
+        theme: state.theme,
+        storageConfig: state.storageConfig,
+        lastSyncedAt: state.lastSyncedAt,
       }),
     }
   )

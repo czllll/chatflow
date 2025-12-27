@@ -71,6 +71,10 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
   const currentModelId = currentConfig.selectedModelId || legacyModelId;
   const isMultimodalModel = currentConfig.models?.find(m => m.id === currentModelId)?.isMultimodal;
 
+  // OAuth providers like Gemini/Antigravity might not have an explicit API key in client store
+  const isOAuthProvider = activeProviderId === 'gemini' || activeProviderId === 'antigravity';
+  const isApiKeyConfigured = !!currentApiKey || isOAuthProvider;
+
   // Handle text selection for branching
   const handleSelectionChange = useCallback(() => {
     const selection = window.getSelection();
@@ -88,7 +92,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
     while (messageElement && !messageElement.hasAttribute('data-message-id')) {
       messageElement = messageElement.parentElement;
     }
-    const messageId = messageElement?.getAttribute('data-message-id') || null;
+    // const messageId = messageElement?.getAttribute('data-message-id') || null;
 
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
@@ -200,7 +204,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
   // Extracted AI request logic for reuse
   const sendAiRequest = useCallback(
     async (currentMessages: Message[]) => {
-      if (!currentApiKey || isLoading || currentMessages.length === 0) return;
+      if (!isApiKeyConfigured || isLoading || currentMessages.length === 0) return;
 
       setIsLoading(true);
 
@@ -293,7 +297,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
         abortControllerRef.current = null;
       }
     },
-    [currentApiKey, currentBaseUrl, currentModelId, isLoading, nodeData?.reference, updateNodeData, nodeId]
+    [currentApiKey, isApiKeyConfigured, currentBaseUrl, currentModelId, isLoading, nodeData?.reference, updateNodeData, nodeId]
   );
 
   // Auto-send AI request when pendingAiRequest is set (for new branches)
@@ -309,7 +313,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
   const onSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      if ((!input.trim() && !selectedImage) || !currentApiKey || isLoading) return;
+      if ((!input.trim() && !selectedImage) || !isApiKeyConfigured || isLoading) return;
 
       const content: MessageContent = selectedImage 
         ? [
@@ -332,6 +336,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
       // Reset textarea cursor position and trigger update
       setTimeout(() => {
         if (textareaRef.current) {
+          textareaRef.current.focus();
           textareaRef.current.setSelectionRange(0, 0);
           // Trigger input event to update custom caret position
           textareaRef.current.dispatchEvent(new Event('input', { bubbles: true }));
@@ -341,7 +346,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
       
       await sendAiRequest(newMessages);
     },
-    [input, selectedImage, currentApiKey, isLoading, messages, updateNodeData, nodeId, sendAiRequest]
+    [input, selectedImage, isApiKeyConfigured, isLoading, messages, updateNodeData, nodeId, sendAiRequest]
   );
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -536,7 +541,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
                   onFocus={() => setIsTextareaFocused(true)}
                   onBlur={() => setIsTextareaFocused(false)}
                   placeholder={isMultimodalModel ? "Message ChatFlow (image supported)" : "Message ChatFlow"}
-                  disabled={!currentApiKey || isLoading}
+                  disabled={!isApiKeyConfigured || isLoading}
                   className="w-full resize-none bg-transparent text-[15px] leading-6 focus:outline-none disabled:opacity-50 max-h-48 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 pt-[11px] pb-2"
                   rows={1}
                   style={{ 
@@ -561,7 +566,7 @@ export default function FocusView({ nodeId, isSidebarCollapsed = false }: FocusV
                 ) : (
                   <button
                     type="submit"
-                    disabled={!currentApiKey || (!input.trim() && !selectedImage) || isProcessingImage}
+                    disabled={!isApiKeyConfigured || (!input.trim() && !selectedImage) || isProcessingImage}
                     className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>

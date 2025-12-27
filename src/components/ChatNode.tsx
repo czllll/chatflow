@@ -54,6 +54,10 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
   const currentApiKey = currentConfig.apiKey || legacyApiKey;
   const currentBaseUrl = currentConfig.baseUrl || legacyBaseUrl;
   const currentModelId = currentConfig.selectedModelId || legacyModelId;
+  
+  // Gemini and Antigravity use OAuth refresh token (handled server-side), not API key
+  const isOAuthProvider = activeProviderId === 'gemini' || activeProviderId === 'antigravity';
+  const isApiKeyConfigured = !!currentApiKey || isOAuthProvider;
 
   // Handle text selection for branching
   const handleSelectionChange = useCallback(() => {
@@ -74,7 +78,7 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
     while (messageElement && !messageElement.hasAttribute('data-message-id')) {
       messageElement = messageElement.parentElement;
     }
-    const messageId = messageElement?.getAttribute('data-message-id') || null;
+    // const messageId = messageElement?.getAttribute('data-message-id') || null;
 
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
@@ -148,7 +152,7 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
   // Send AI request function (reusable)
   const sendAiRequest = useCallback(
     async (messagesToSend: Message[]) => {
-      if (!currentApiKey || isLoading) return;
+      if (!isApiKeyConfigured || isLoading) return;
 
       setIsLoading(true);
 
@@ -235,23 +239,23 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
         abortControllerRef.current = null;
       }
     },
-    [currentApiKey, currentBaseUrl, currentModelId, nodeData.reference, updateNodeData, id, isLoading]
+    [isApiKeyConfigured, currentApiKey, currentBaseUrl, currentModelId, nodeData.reference, updateNodeData, id, isLoading]
   );
 
   // Auto-send AI request for new branches with pendingAiRequest flag
   useEffect(() => {
-    if (nodeData.pendingAiRequest && nodeData.messages.length > 0 && currentApiKey && !isLoading) {
+    if (nodeData.pendingAiRequest && nodeData.messages.length > 0 && isApiKeyConfigured && !isLoading) {
       // Clear the flag and send request
       updateNodeData(id, { pendingAiRequest: false });
       sendAiRequest(nodeData.messages);
     }
-  }, [nodeData.pendingAiRequest, nodeData.messages, currentApiKey, isLoading, updateNodeData, id, sendAiRequest]);
+  }, [nodeData.pendingAiRequest, nodeData.messages, isApiKeyConfigured, isLoading, updateNodeData, id, sendAiRequest]);
 
   // Handle form submit
   const onSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      if (!input.trim() || !currentApiKey || isLoading) return;
+      if (!input.trim() || !isApiKeyConfigured || isLoading) return;
 
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -265,7 +269,7 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
       
       await sendAiRequest(newMessages);
     },
-    [input, currentApiKey, isLoading, nodeData.messages, updateNodeData, id, sendAiRequest]
+    [input, isApiKeyConfigured, isLoading, nodeData.messages, updateNodeData, id, sendAiRequest]
   );
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -396,8 +400,8 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={currentApiKey ? "Ask anything..." : "Set API key first"}
-            disabled={!currentApiKey || isLoading}
+            placeholder={isApiKeyConfigured ? "Ask anything..." : "Set API key first"}
+            disabled={!isApiKeyConfigured || isLoading}
             className="flex-1 resize-none bg-transparent px-1 py-1 text-sm focus:outline-none disabled:opacity-50 nodrag min-h-[20px] max-h-[80px]"
             rows={1}
             style={{ fieldSizing: "content" } as React.CSSProperties}
@@ -416,7 +420,7 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
           ) : (
             <button
               type="submit"
-              disabled={!currentApiKey || !input.trim()}
+              disabled={!isApiKeyConfigured || !input.trim()}
               className="p-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
