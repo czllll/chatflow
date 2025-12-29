@@ -348,7 +348,7 @@ export default function ChatNode({ id, data }: NodeProps<ChatNodeType>) {
             className={`text-sm ${
               message.role === "user"
                 ? "text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 rounded-lg px-3 py-2 whitespace-pre-wrap"
-                : "text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-800 prose-code:text-amber-600 dark:prose-code:text-amber-400 prose-code:before:content-none prose-code:after:content-none"
+                : "text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-800 prose-code:text-amber-700 dark:prose-code:text-amber-300 prose-code:before:content-none prose-code:after:content-none"
             }`}
           >
             {message.role === "user" ? (

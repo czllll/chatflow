@@ -39,10 +39,16 @@ class AntigravityTokenManager {
   }
 
   get clientId(): string {
+    if (!ANTIGRAVITY_OAUTH_CLIENT_ID) {
+      throw new Error('ANTIGRAVITY_CLIENT_ID environment variable is not set');
+    }
     return ANTIGRAVITY_OAUTH_CLIENT_ID;
   }
 
   get clientSecret(): string {
+    if (!ANTIGRAVITY_OAUTH_CLIENT_SECRET) {
+      throw new Error('ANTIGRAVITY_CLIENT_SECRET environment variable is not set');
+    }
     return ANTIGRAVITY_OAUTH_CLIENT_SECRET;
   }
 
@@ -90,6 +96,10 @@ class AntigravityTokenManager {
     const refreshToken = this.getRefreshToken(userProvidedRefreshToken);
     if (!refreshToken) {
       throw new Error('No Antigravity refresh token available. Please authenticate via Settings.');
+    }
+
+    if (!ANTIGRAVITY_OAUTH_CLIENT_ID || !ANTIGRAVITY_OAUTH_CLIENT_SECRET) {
+      throw new Error('Antigravity OAuth credentials are not configured');
     }
 
     // Refresh the token

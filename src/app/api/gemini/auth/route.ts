@@ -12,6 +12,13 @@ export async function POST(req: Request) {
       });
     }
 
+    if (!OAUTH_CLIENT_ID || !OAUTH_CLIENT_SECRET) {
+      return new Response(JSON.stringify({ error: "OAuth configuration missing" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
     const params = new URLSearchParams({
       client_id: OAUTH_CLIENT_ID,
       client_secret: OAUTH_CLIENT_SECRET,

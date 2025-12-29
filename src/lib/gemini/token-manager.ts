@@ -91,6 +91,10 @@ export class GeminiTokenManager {
    */
   private async refreshAccessToken(refreshToken: string): Promise<TokenData> {
     try {
+      if (!OAUTH_CLIENT_ID || !OAUTH_CLIENT_SECRET) {
+        throw new Error('OAuth credentials are not configured');
+      }
+
       const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
