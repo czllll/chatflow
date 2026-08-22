@@ -1,7 +1,5 @@
 # ChatFlow
 
-[中文文档](./README_CN.md)
-
 A non-linear AI chat application with branching conversations and visual flow editing.
 
 ## Features
